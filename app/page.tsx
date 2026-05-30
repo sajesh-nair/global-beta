@@ -50,7 +50,7 @@ export default function Dashboard() {
         if (niftyRes.data) setStocks(niftyRes.data);
         if (etfRes.data) setEtfs(etfRes.data);
       } catch (err) {
-        console.error("Error connecting to database partitions:", err);
+        console.error("Critical Terminal Sync Error:", err);
       } finally {
         setLoading(false);
       }
@@ -109,14 +109,39 @@ export default function Dashboard() {
     filteredEtfs.slice(itemsPerEtfColumn * 2)
   ];
 
+  // DEFENSIVE DATA CONTEXT FORMATTER (Resolves Polarity & Fixes Decimal Precision)
+  const parseMetricDisplay = (val: number | null | undefined) => {
+    if (val === null || val === undefined || isNaN(val)) {
+      return { text: "0.0%", className: "text-gray-500 font-mono" };
+    }
+    const cleanNum = floatValueHandler(val);
+    if (cleanNum > 0) {
+      return { text: `+${cleanNum.toFixed(1)}%`, className: "text-emerald-400 font-mono" };
+    }
+    if (cleanNum < 0) {
+      // Math.abs ensures we handle the negative sign cleanly without duplicate characters
+      return { text: `-${Math.abs(cleanNum).toFixed(1)}%`, className: "text-rose-500 font-mono" };
+    }
+    return { text: "0.0%", className: "text-gray-400 font-mono" };
+  };
+
+  const floatValueHandler = (input: any): number => {
+    if (typeof input === 'number') return input;
+    const parsed = parseFloat(input);
+    return isNaN(parsed) ? 0 : parsed;
+  };
+
   const renderTrendBadge = (sixMonth: number, threeMonth: number) => {
-    if (threeMonth >= 30 && sixMonth <= threeMonth * 1.3) {
+    const sM = floatValueHandler(sixMonth);
+    const tM = floatValueHandler(threeMonth);
+
+    if (tM >= 30 && sM <= tM * 1.3) {
       return <span className="px-2 py-0.5 rounded-full text-[9px] font-bold tracking-wider bg-amber-500/10 border border-amber-500/20 text-amber-400">🚀 BREAKOUT</span>;
     }
-    if (sixMonth >= 50 && threeMonth <= sixMonth * 0.15) {
+    if (sM >= 50 && tM <= sM * 0.15) {
       return <span className="px-2 py-0.5 rounded-full text-[9px] font-bold tracking-wider bg-rose-500/10 border border-rose-500/20 text-rose-400">⚠️ EXHAUSTED</span>;
     }
-    if (sixMonth >= 40 && threeMonth >= sixMonth * 0.35) {
+    if (sM >= 40 && tM >= sM * 0.35) {
       return <span className="px-2 py-0.5 rounded-full text-[9px] font-bold tracking-wider bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">💎 COMPOUNDER</span>;
     }
     return <span className="px-2 py-0.5 rounded-full text-[9px] font-bold tracking-wider bg-gray-800/60 border border-gray-700/40 text-gray-400">🔄 CYCLICAL</span>;
@@ -126,15 +151,15 @@ export default function Dashboard() {
     <div className="min-h-screen bg-[#070a12] text-[#f3f4f6] p-6 lg:p-12 font-sans selection:bg-cyan-500/20 antialiased">
       <div className="max-w-[1600px] mx-auto">
         
-        {/* Minimalist Apple-Inspired Header */}
+        {/* Minimalist Tech Header Frame */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center pb-8 mb-10 border-b border-gray-800/40 gap-6">
           <div>
             <h1 className="text-3xl font-extrabold tracking-tight text-white bg-gradient-to-b from-white to-gray-400 bg-clip-text text-transparent">
               {activeTab === 'nifty' && 'Nifty Momentum Leaders'}
-              {activeTab === 'sectors' && 'Macro Sector Weights'}
+              {activeTab === 'sectors' && 'Macro Sector Rotations'}
               {activeTab === 'etf' && 'GlobalBeta Terminal'}
             </h1>
-            <p className="text-xs text-gray-400 tracking-wide font-medium uppercase mt-1">
+            <p className="text-xs text-gray-400 tracking-wide font-medium uppercase mt-1.5">
               {activeTab === 'nifty' && 'High-conviction quantitative trend matrices'}
               {activeTab === 'sectors' && 'Institutional industry rotational strengths'}
               {activeTab === 'etf' && 'Global geographical capital allocation returns'}
@@ -152,28 +177,28 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Apple/SpaceX Ultra-Sleek Navigation Tabs */}
+        {/* Premium Navigation Tabs */}
         <div className="flex p-1 bg-[#0d1321] rounded-xl border border-gray-800/60 max-w-lg mb-10">
           <button
             onClick={() => { setActiveTab('nifty'); setSearchTerm(""); }}
-            className={`flex-1 text-center py-2 text-xs font-semibold tracking-wider uppercase rounded-lg transition-all duration-200 ${
-              activeTab === 'nifty' ? 'bg-[#182235] text-cyan-400 border border-gray-700/30' : 'text-gray-400 hover:text-gray-200'
+            className={`flex-1 text-center py-2.5 text-xs font-semibold tracking-wider uppercase rounded-lg transition-all duration-200 ${
+              activeTab === 'nifty' ? 'bg-[#182235] text-cyan-400 border border-gray-700/30 shadow-sm' : 'text-gray-400 hover:text-gray-200'
             }`}
           >
             🇮🇳 Top 20 Stocks
           </button>
           <button
             onClick={() => { setActiveTab('sectors'); setSearchTerm(""); }}
-            className={`flex-1 text-center py-2 text-xs font-semibold tracking-wider uppercase rounded-lg transition-all duration-200 ${
-              activeTab === 'sectors' ? 'bg-[#182235] text-cyan-400 border border-gray-700/30' : 'text-gray-400 hover:text-gray-200'
+            className={`flex-1 text-center py-2.5 text-xs font-semibold tracking-wider uppercase rounded-lg transition-all duration-200 ${
+              activeTab === 'sectors' ? 'bg-[#182235] text-cyan-400 border border-gray-700/30 shadow-sm' : 'text-gray-400 hover:text-gray-200'
             }`}
           >
             📊 Industry Strength
           </button>
           <button
             onClick={() => { setActiveTab('etf'); setSearchTerm(""); }}
-            className={`flex-1 text-center py-2 text-xs font-semibold tracking-wider uppercase rounded-lg transition-all duration-200 ${
-              activeTab === 'etf' ? 'bg-[#182235] text-cyan-400 border border-gray-700/30' : 'text-gray-400 hover:text-gray-200'
+            className={`flex-1 text-center py-2.5 text-xs font-semibold tracking-wider uppercase rounded-lg transition-all duration-200 ${
+              activeTab === 'etf' ? 'bg-[#182235] text-cyan-400 border border-gray-700/30 shadow-sm' : 'text-gray-400 hover:text-gray-200'
             }`}
           >
             🌐 Global ETFs
@@ -182,8 +207,8 @@ export default function Dashboard() {
 
         {loading ? (
           <div className="flex flex-col items-center justify-center py-32 space-y-3">
-            <div className="w-6 h-6 border-2 border-cyan-500/20 border-t-cyan-400 rounded-full animate-spin"></div>
-            <div className="text-[10px] font-bold text-gray-500 tracking-widest uppercase animate-pulse">Syncing Core Matrix Logs...</div>
+            <div className="w-5 h-5 border-2 border-cyan-500/20 border-t-cyan-400 rounded-full animate-spin"></div>
+            <div className="text-[9px] font-bold text-gray-500 tracking-widest uppercase animate-pulse">Syncing Core Core Metrics...</div>
           </div>
         ) : activeTab === 'nifty' ? (
           
@@ -205,28 +230,32 @@ export default function Dashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-800/30 text-xs">
-                  {niftyColumn1.map((stock, idx) => (
-                    <tr key={stock.ticker} className="hover:bg-[#121929]/40 transition duration-150">
-                      <td className="py-3.5 px-6 font-medium text-gray-200">
-                        <div className="flex items-center space-x-3">
-                          <span className="text-gray-600 font-mono text-xs w-4">{idx + 1}</span>
-                          <div>
-                            <div className="font-semibold text-gray-100 tracking-tight text-sm">
-                              {stock.company_name.split(' ').slice(0,2).join(' ')}
-                            </div>
-                            <div className="flex items-center space-x-2 mt-1">
-                              <span className="text-[10px] font-mono text-cyan-400 font-bold">{stock.ticker}</span>
-                              {renderTrendBadge(stock.return_6m, stock.return_3m)}
+                  {niftyColumn1.map((stock, idx) => {
+                    const m3 = parseMetricDisplay(stock.return_3m);
+                    const m6 = parseMetricDisplay(stock.return_6m);
+                    return (
+                      <tr key={stock.ticker} className="hover:bg-[#121929]/40 transition duration-150">
+                        <td className="py-3.5 px-6 font-medium text-gray-200">
+                          <div className="flex items-center space-x-3">
+                            <span className="text-gray-600 font-mono text-xs font-bold w-4">{idx + 1}</span>
+                            <div>
+                              <div className="font-semibold text-gray-100 tracking-tight text-sm">
+                                {stock.company_name.split(' ').slice(0,2).join(' ')}
+                              </div>
+                              <div className="flex items-center space-x-2 mt-1">
+                                <span className="text-[10px] font-mono text-cyan-400 font-bold">{stock.ticker}</span>
+                                {renderTrendBadge(stock.return_6m, stock.return_3m)}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </td>
-                      <td className="py-3.5 px-4 text-gray-400 truncate max-w-[120px]" title={stock.industry}>{stock.industry}</td>
-                      <td className="py-3.5 px-4 text-right font-mono font-medium text-gray-300">+{stock.return_3m?.toFixed(1)}%</td>
-                      <td className="py-3.5 px-4 text-right font-mono font-medium text-gray-300">+{stock.return_6m?.toFixed(1)}%</td>
-                      <td className="py-3.5 px-6 text-right font-bold font-mono text-emerald-400 bg-emerald-500/[0.02]">{stock.momentum_score.toFixed(1)}</td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td className="py-3.5 px-4 text-gray-400 truncate max-w-[120px]" title={stock.industry}>{stock.industry}</td>
+                        <td className={`py-3.5 px-4 text-right ${m3.className}`}>{m3.text}</td>
+                        <td className={`py-3.5 px-4 text-right ${m6.className}`}>{m6.text}</td>
+                        <td className="py-3.5 px-6 text-right font-bold font-mono text-emerald-400 bg-emerald-500/[0.02]">{floatValueHandler(stock.momentum_score).toFixed(1)}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -247,28 +276,32 @@ export default function Dashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-800/30 text-xs">
-                  {niftyColumn2.map((stock, idx) => (
-                    <tr key={stock.ticker} className="hover:bg-[#121929]/40 transition duration-150">
-                      <td className="py-3.5 px-6 font-medium text-gray-200">
-                        <div className="flex items-center space-x-3">
-                          <span className="text-gray-600 font-mono text-xs w-4">{idx + 11}</span>
-                          <div>
-                            <div className="font-semibold text-gray-100 tracking-tight text-sm">
-                              {stock.company_name.split(' ').slice(0,2).join(' ')}
-                            </div>
-                            <div className="flex items-center space-x-2 mt-1">
-                              <span className="text-[10px] font-mono text-cyan-400 font-bold">{stock.ticker}</span>
-                              {renderTrendBadge(stock.return_6m, stock.return_3m)}
+                  {niftyColumn2.map((stock, idx) => {
+                    const m3 = parseMetricDisplay(stock.return_3m);
+                    const m6 = parseMetricDisplay(stock.return_6m);
+                    return (
+                      <tr key={stock.ticker} className="hover:bg-[#121929]/40 transition duration-150">
+                        <td className="py-3.5 px-6 font-medium text-gray-200">
+                          <div className="flex items-center space-x-3">
+                            <span className="text-gray-600 font-mono text-xs font-bold w-4">{idx + 11}</span>
+                            <div>
+                              <div className="font-semibold text-gray-100 tracking-tight text-sm">
+                                {stock.company_name.split(' ').slice(0,2).join(' ')}
+                              </div>
+                              <div className="flex items-center space-x-2 mt-1">
+                                <span className="text-[10px] font-mono text-cyan-400 font-bold">{stock.ticker}</span>
+                                {renderTrendBadge(stock.return_6m, stock.return_3m)}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </td>
-                      <td className="py-3.5 px-4 text-gray-400 truncate max-w-[120px]" title={stock.industry}>{stock.industry}</td>
-                      <td className="py-3.5 px-4 text-right font-mono font-medium text-gray-300">+{stock.return_3m?.toFixed(1)}%</td>
-                      <td className="py-3.5 px-4 text-right font-mono font-medium text-gray-300">+{stock.return_6m?.toFixed(1)}%</td>
-                      <td className="py-3.5 px-6 text-right font-bold font-mono text-emerald-400 bg-emerald-500/[0.02]">{stock.momentum_score.toFixed(1)}</td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td className="py-3.5 px-4 text-gray-400 truncate max-w-[120px]" title={stock.industry}>{stock.industry}</td>
+                        <td className={`py-3.5 px-4 text-right ${m3.className}`}>{m3.text}</td>
+                        <td className={`py-3.5 px-4 text-right ${m6.className}`}>{m6.text}</td>
+                        <td className="py-3.5 px-6 text-right font-bold font-mono text-emerald-400 bg-emerald-500/[0.02]">{floatValueHandler(stock.momentum_score).toFixed(1)}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -276,7 +309,7 @@ export default function Dashboard() {
           
         ) : activeTab === 'sectors' ? (
           
-          /* VIEW 2: EXCLUSIVE MINIMAL SECTOR ROTATIONS WITH PREMIUM SLIDERS */
+          /* VIEW 2: EXCLUSIVE INDUSTRY ROTATIONS WITH SLIDERS */
           <div className="max-w-3xl mx-auto bg-[#0b101d]/60 border border-gray-800/50 rounded-xl overflow-hidden backdrop-blur-md">
             <div className="px-6 py-4 bg-[#0d1321] border-b border-gray-800/40">
               <h3 className="text-xs font-bold uppercase tracking-widest text-purple-400">Macro Rotational Strengths</h3>
@@ -294,7 +327,7 @@ export default function Dashboard() {
                           {ind.stock_count} {ind.stock_count === 1 ? 'STOCK' : 'STOCKS'}
                         </span>
                       </div>
-                      <span className="font-bold font-mono text-purple-300">{ind.avg_score.toFixed(2)}</span>
+                      <span className="font-bold font-mono text-purple-300">{floatValueHandler(ind.avg_score).toFixed(1)}</span>
                     </div>
                     <div className="w-full h-1.5 bg-[#090d16] rounded-full overflow-hidden border border-gray-800/40">
                       <div 
@@ -310,7 +343,7 @@ export default function Dashboard() {
           
         ) : (
           
-          /* VIEW 3: GLOBAL ETF TRACKER (ORIGINAL COLUMNS ARCHITECTURE PRESERVED) */
+          /* VIEW 3: GLOBAL ETF TRACKER (DYNAMIC SIGNAGE MATCHES DATABASE POLARITY) */
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {etfColumns.map((colData, colIdx) => (
               <div key={colIdx} className="bg-[#0b101d]/60 border border-gray-800/50 rounded-xl overflow-hidden backdrop-blur-md">
@@ -319,19 +352,26 @@ export default function Dashboard() {
                     <tr className="bg-[#0d1321] border-b border-gray-800/50 text-[10px] font-bold text-cyan-400 uppercase tracking-widest">
                       <th className="py-3 px-4">Country/Region</th>
                       <th className="py-3 px-4 text-center">Ticker</th>
-                      <th className="py-3 px-4 text-right">2025-26 %</th>
+                      <th className="py-3 px-5 text-right">2025-26 %</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-800/30 text-xs">
-                    {colData.map((item) => (
-                      <tr key={item.ticker} className="hover:bg-[#121929]/40 transition duration-150">
-                        <td className="py-3 px-4 font-semibold text-gray-300">{item.country_region}</td>
-                        <td className="py-3 px-4 text-center font-mono text-gray-500 font-bold">{item.ticker}</td>
-                        <td className="py-3 px-4 text-right font-bold font-mono text-emerald-400 bg-emerald-500/[0.01]">
-                          +{item.return_2025_2026}%
-                        </td>
-                      </tr>
-                    ))}
+                    {colData.map((item) => {
+                      const perf = parseMetricDisplay(item.return_2025_2026);
+                      const rawVal = floatValueHandler(item.return_2025_2026);
+                      return (
+                        <tr key={item.ticker} className="hover:bg-[#121929]/40 transition duration-150">
+                          <td className="py-3.5 px-4 font-semibold text-gray-300">{item.country_region}</td>
+                          <td className="py-3.5 px-4 text-center font-mono text-gray-500 font-bold">{item.ticker}</td>
+                          {/* Dynamically colors background box based on positive vs negative returns */}
+                          <td className={`py-3.5 px-5 text-right font-bold font-mono text-xs ${perf.className} ${
+                            rawVal >= 0 ? 'bg-emerald-500/[0.01]' : 'bg-rose-500/[0.01]'
+                          }`}>
+                            {perf.text}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
