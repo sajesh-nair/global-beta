@@ -135,6 +135,17 @@ export default function Dashboard() {
             ))}
           </div>
         )}
+
+        {/* Professional Developer Attribution Footer */}
+        <footer className="mt-12 text-center text-sm text-slate-500 border-t border-slate-800/60 pt-6 pb-8 w-full">
+          <p>
+            Built and Maintained by <span className="text-cyan-400 font-medium">Sajesh Nair</span>
+          </p>
+          <p className="text-xs text-slate-600 mt-1">
+            Automated Macro Dashboard Pipeline • Powered by Next.js, Supabase & Vercel
+          </p>
+        </footer>
+
       </div>
     </div>
   );
