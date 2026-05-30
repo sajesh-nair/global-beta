@@ -1,0 +1,1 @@
+cron: python api/cron/update-nifty.py

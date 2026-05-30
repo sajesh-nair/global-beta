@@ -1,14 +1,12 @@
 {
-  "crons": [
-    {
-      "path": "/api/cron/update-etfs",
-      "schedule": "0 23 * * 1-5"
-    }
-  ],
-  "rewrites": [
-    {
-      "source": "/api/cron/update-etfs",
-      "destination": "/api/cron/update-etfs.py"
-    }
-  ]
+    "crons": [
+        {
+            "path": "/api/cron/update-etfs",
+            "schedule": "0 23 * * 1-5"
+        },
+        {
+            "path": "/api/cron/update-nifty",
+            "schedule": "30 15 * * 1-5"
+        }
+    ]
 }
