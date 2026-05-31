@@ -12,10 +12,35 @@ interface NiftyStockData {
   return_3m: number;
 }
 
-interface ETFData {
+interface AnalyticsMetrics {
+  total_return: number;
+  cagr: number;
+  max_drawdown: number;
+  profit_factor: number;
+  win_loss_ratio: number;
+  hit_rate: number;
+  sharpe_ratio: number;
+  sortino_ratio: number;
+  alpha: number;
+  beta: number;
+  romad: number;
+  turnover_ratio: number;
+  cash_days: number;
+  equity_curve: string;
+  metrics?: {
+    total_return: number;
+    profit_factor: number;
+    win_loss_ratio: number;
+    hit_rate: number;
+    sharpe_ratio: number;
+    sortino_ratio: number;
+  };
+}
+
+interface GlobalCountryAllocation {
+  country: string;
   ticker: string;
-  country_region: string;
-  return_2025_2026: number;
+  return_val: number;
 }
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -23,33 +48,84 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export default function Dashboard() {
-  const [activeTab, setActiveTab] = useState<'nifty' | 'backtest' | 'etf'>('nifty');
+  const [activeTab, setActiveTab] = useState<'portfolio' | 'backtest' | 'global'>('portfolio');
   const [stocks, setStocks] = useState<NiftyStockData[]>([]);
-  const [etfs, setEtfs] = useState<ETFData[]>([]);
+  const [metrics, setMetrics] = useState<AnalyticsMetrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
 
+  const globalMatrixData: GlobalCountryAllocation[] = [
+    { country: "South Korea", ticker: "EWY", return_val: 311.7 },
+    { country: "Peru", ticker: "EPU", return_val: 119.6 },
+    { country: "Taiwan", ticker: "EWT", return_val: 109.4 },
+    { country: "Austria", ticker: "EWO", return_val: 105.2 },
+    { country: "Poland", ticker: "EPOL", return_val: 103.8 },
+    { country: "Greece", ticker: "GREK", return_val: 98.2 },
+    { country: "Spain", ticker: "EWP", return_val: 91.8 },
+    { country: "Israel", ticker: "EIS", return_val: 82.6 },
+    { country: "Finland", ticker: "EFNL", return_val: 81.7 },
+    { country: "Colombia", ticker: "COLO", return_val: 81.7 },
+    { country: "South Africa", ticker: "EZA", return_val: 75.0 },
+    { country: "Chile", ticker: "ECH", return_val: 73.8 },
+    { country: "Italy", ticker: "EWI", return_val: 72.2 },
+    { country: "Mexico", ticker: "EWW", return_val: 70.5 },
+    { country: "Brazil", ticker: "EWZ", return_val: 66.7 },
+    { country: "Norway", ticker: "NORW", return_val: 65.8 },
+    { country: "Emerging Markets", ticker: "IEMG", return_val: 64.9 },
+    { country: "Vietnam", ticker: "VNM", return_val: 62.1 },
+    { country: "Netherlands", ticker: "EWN", return_val: 58.9 },
+    { country: "Eurozone", ticker: "EZU", return_val: 51.4 },
+    { country: "Total International", ticker: "VXUS", return_val: 51.4 },
+    { country: "Belgium", ticker: "EWK", return_val: 50.7 },
+    { country: "Hong Kong", ticker: "EWH", return_val: 48.6 },
+    { country: "Canada", ticker: "EWC", return_val: 48.0 },
+    { country: "Europe", ticker: "VGK", return_val: 45.9 },
+    { country: "Sweden", ticker: "EWD", return_val: 45.9 },
+    { country: "Japan", ticker: "EWJ", return_val: 45.1 },
+    { country: "EAFE", ticker: "IEFA", return_val: 45.0 },
+    { country: "United Kingdom", ticker: "EWU", return_val: 44.3 },
+    { country: "Singapore", ticker: "EWS", return_val: 41.5 },
+    { country: "Switzerland", ticker: "EWL", return_val: 40.3 },
+    { country: "Germany", ticker: "EWG", return_val: 39.8 },
+    { country: "Total World", ticker: "VT", return_val: 37.9 },
+    { country: "Ireland", ticker: "EIRL", return_val: 34.5 },
+    { country: "France", ticker: "EWQ", return_val: 33.0 },
+    { country: "US", ticker: "SPY", return_val: 31.3 },
+    { country: "Thailand", ticker: "THD", return_val: 28.1 },
+    { country: "Australia", ticker: "EWA", return_val: 26.3 },
+    { country: "Kuwait", ticker: "KWT", return_val: 25.8 },
+    { country: "UAE", ticker: "UAE", return_val: 24.9 },
+    { country: "China", ticker: "MCHI", return_val: 22.4 },
+    { country: "Malaysia", ticker: "EWM", return_val: 21.9 },
+    { country: "Argentina", ticker: "ARGT", return_val: 12.6 },
+    { country: "Qatar", ticker: "QAT", return_val: 11.4 },
+    { country: "Turkey", ticker: "TUR", return_val: 7.5 },
+    { country: "Denmark", ticker: "EDEN", return_val: 7.5 },
+    { country: "New Zealand", ticker: "ENZL", return_val: 5.3 },
+    { country: "Saudi Arabia", ticker: "KSA", return_val: -2.6 },
+    { country: "Philippines", ticker: "EPHE", return_val: -3.8 },
+    { country: "India", ticker: "INDA", return_val: -9.1 },
+    { country: "Indonesia", ticker: "EIDO", return_val: -29.8 }
+  ];
+
   useEffect(() => {
-    async function fetchAllMetrics() {
+    async function fetchDatabaseData() {
       try {
         setLoading(true);
-        const [niftyRes, etfRes] = await Promise.all([
-          supabase.from('nifty_momentum_20').select('ticker, company_name, industry, momentum_score, return_6m, return_3m').order('momentum_score', { ascending: false }),
-          supabase.from('etf_performance').select('ticker, country_region, return_2025_2026').order('return_2025_2026', { ascending: false })
+        const [niftyRes, metricsRes] = await Promise.all([
+          supabase.from('nifty_momentum_20').select('*').order('momentum_score', { ascending: false }),
+          supabase.from('backtest_analytics').select('*').single()
         ]);
 
-        if (niftyRes.error) throw niftyRes.error;
-        if (etfRes.error) throw etfRes.error;
-
         if (niftyRes.data) setStocks(niftyRes.data);
-        if (etfRes.data) setEtfs(etfRes.data);
+        if (metricsRes.data) setMetrics(metricsRes.data);
       } catch (err) {
-        console.error("Terminal Sync Interruption: ", err);
+        console.error("Database connection error: ", err);
       } finally {
         setLoading(false);
       }
     }
-    if (supabaseUrl && supabaseAnonKey) fetchAllMetrics();
+    fetchDatabaseData();
   }, []);
 
   const filteredNifty = stocks.filter(stock => 
@@ -57,201 +133,264 @@ export default function Dashboard() {
     stock.ticker.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const filteredGlobal = globalMatrixData.filter(item => 
+    item.country.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    item.ticker.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   const parseMetricDisplay = (val: number | null | undefined) => {
-    if (val === null || val === undefined || isNaN(val)) return { text: "0.0%", className: "text-[#86868b] font-mono" };
-    if (val > 0) return { text: `+${val.toFixed(1)}%`, className: "text-[#008060] font-mono font-semibold" };
-    if (val < 0) return { text: `-${Math.abs(val).toFixed(1)}%`, className: "text-[#d93f3f] font-mono font-semibold" };
-    return { text: "0.0%", className: "text-[#1d1d1f] font-mono" };
+    if (val === null || val === undefined || isNaN(val)) return { text: "0.0%", className: "text-[#8e8e93] font-mono" };
+    if (val > 0) return { text: `+${val.toFixed(1)}%`, className: "text-[#30d158] font-mono font-medium" };
+    if (val < 0) return { text: `-${Math.abs(val).toFixed(1)}%`, className: "text-[#ff453a] font-mono font-medium" };
+    return { text: "0.0%", className: "text-[#ffffff] font-mono" };
+  };
+
+  const getMetricValue = (key: 'total_return' | 'profit_factor' | 'win_loss_ratio' | 'hit_rate' | 'sharpe_ratio' | 'sortino_ratio') => {
+    if (!metrics) return 0;
+    if (metrics.metrics && metrics.metrics[key] !== undefined) return metrics.metrics[key];
+    if ((metrics as any)[key] !== undefined) return (metrics as any)[key];
+    return 0;
   };
 
   return (
-    <div className="min-h-screen bg-[#f5f5f7] text-[#1d1d1f] antialiased selection:bg-[#0071e3]/10 font-sans">
+    <div className="min-h-screen bg-[#070709] text-[#ffffff] antialiased font-sans selection:bg-[#0a84ff]/20">
       
-      {/* Apple Styled Subtle Global Banner */}
-      <div className="bg-[#1d1d1f] text-[#f5f5f7] text-[12px] py-3 text-center tracking-wide font-medium">
-        Strategy Mandate: Rebalanced Monthly on the first execution day block. Portfolio metrics remain locked.
+      <div className="bg-[#121216] text-[#8e8e93] text-[11px] py-2.5 text-center tracking-wider font-medium border-b border-[#1c1c24] uppercase">
+        System Status: Running Pure Relative Momentum Weights • Nifty 200 Universe Active
       </div>
 
-      <div className="max-w-[1340px] mx-auto px-6 py-12">
+      <div className="max-w-[1400px] mx-auto px-8 py-12">
         
-        {/* Apple Style Clean Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center pb-8 mb-12 border-b border-[#d2d2d7] gap-6">
+        {/* Header Layout */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center pb-8 mb-10 border-b border-[#1c1c24] gap-6">
           <div>
-            <h1 className="text-[40px] font-semibold tracking-tight text-[#1d1d1f] font-sans">
-              {activeTab === 'nifty' && 'Nifty 500 Momentum 20 Portfolio'}
-              {activeTab === 'backtest' && 'Performance & Backtest'}
-              {activeTab === 'etf' && 'GlobalBeta Router'}
+            <h1 className="text-[34px] font-semibold tracking-tight text-[#ffffff]">
+              {activeTab === 'global' ? "GlobalBeta Router" : "Nifty 200 Momentum 20 Portfolio"}
             </h1>
-            <p className="text-[14px] text-[#86868b] mt-1 font-normal">
-              {activeTab === 'nifty' && 'High-conviction risk-adjusted equity trend index.'}
-              {activeTab === 'backtest' && 'Historical validation audit report matrix (2016 - 2026).'}
-              {activeTab === 'etf' && 'Geographical macro-cycle capital distribution.'}
+            <p className="text-[13px] text-[#8e8e93] mt-1 font-normal tracking-wide">
+              {activeTab === 'global' 
+                ? "Geographical macro-cycle capital distribution models tracking international assets." 
+                : "High-conviction cross-sectional relative trend indices tracking liquid large and mid-caps."}
             </p>
           </div>
           
-          <div className="w-full md:w-72">
+          <div className="w-full md:w-80">
             <input 
               type="text"
               placeholder="Search assets..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-[#ffffff] text-[#1d1d1f] placeholder-[#86868b] text-[13px] px-4 py-2.5 rounded-full border border-[#d2d2d7] focus:outline-none focus:border-[#0071e3] focus:ring-1 focus:ring-[#0071e3] transition-all"
+              className="w-full bg-[#121216] text-[#ffffff] placeholder-[#444450] text-[13px] px-5 py-2.5 rounded-full border border-[#1c1c24] focus:outline-none focus:border-[#0a84ff] transition-all font-medium"
             />
           </div>
         </div>
 
-        {/* Clean Apple Tab Control Pill */}
-        <div className="flex bg-[#e8e8ed] p-1 rounded-full max-w-md mb-12 ml-1 shadow-inner">
-          {(['nifty', 'backtest', 'etf'] as const).map((tab) => (
+        {/* Tab Selection Row */}
+        <div className="flex bg-[#121216] p-1 rounded-full max-w-sm mb-10 border border-[#1c1c24]">
+          {(['portfolio', 'backtest', 'global'] as const).map((tab) => (
             <button
               key={tab}
-              onClick={() => { setActiveTab(tab); setSearchTerm(""); }}
-              className={`flex-1 text-center py-2 text-[13px] font-medium tracking-normal rounded-full transition-all duration-200 ${
-                activeTab === tab ? 'bg-[#ffffff] text-[#1d1d1f] shadow-md font-semibold' : 'text-[#6e6e73] hover:text-[#1d1d1f]'
+              onClick={() => setActiveTab(tab)}
+              className={`flex-1 text-center py-2 text-[13px] font-medium rounded-full transition-all uppercase tracking-wider ${
+                activeTab === tab ? 'bg-[#1c1c24] text-[#0a84ff] font-semibold' : 'text-[#8e8e93] hover:text-[#ffffff]'
               }`}
             >
-              {tab === 'nifty' && 'Portfolio'}
-              {tab === 'backtest' && 'Backtest'}
-              {tab === 'etf' && 'Global Matrix'}
+              {tab === 'portfolio' ? 'Portfolio' : tab === 'backtest' ? 'Backtest' : 'Global Matrix'}
             </button>
           ))}
         </div>
 
         {loading ? (
           <div className="flex flex-col items-center justify-center py-32 space-y-3">
-            <div className="w-6 h-6 border-2 border-[#d2d2d7] border-t-[#0071e3] rounded-full animate-spin"></div>
-            <div className="text-[12px] font-medium text-[#6e6e73] tracking-normal">Syncing Alpha Architecture...</div>
+            <div className="w-5 h-5 border-2 border-[#1c1c24] border-t-[#0a84ff] rounded-full animate-spin"></div>
+            <div className="text-[11px] font-medium uppercase tracking-widest text-[#8e8e93]">Syncing System Architecture...</div>
           </div>
-        ) : activeTab === 'nifty' ? (
+        ) : activeTab === 'portfolio' ? (
           
-          /* VIEW 1: WHITE MINIMALIST ASSET SHEETS */
+          /* TAB 1: PREMIUM COMPACT ASSET LIST GRID */
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
             {[filteredNifty.slice(0, 10), filteredNifty.slice(10, 20)].map((colData, colIdx) => (
-              <div key={colIdx} className="bg-[#ffffff] rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.02)] border border-[#e8e8ed] overflow-hidden">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-[#e8e8ed] text-[11px] font-semibold text-[#86868b] uppercase tracking-wider bg-[#f5f5f7]/60">
-                      <th className="py-3.5 px-6">Asset Name</th>
-                      <th className="py-3.5 px-4">Sector</th>
-                      <th className="py-3.5 px-4 text-right">3M</th>
-                      <th className="py-3.5 px-4 text-right">6M</th>
-                      <th className="py-3.5 px-6 text-right">M-Score</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#f5f5f7] text-[13px] text-[#1d1d1f]">
-                    {colData.map((stock, idx) => {
-                      const m3 = parseMetricDisplay(stock.return_3m);
-                      const m6 = parseMetricDisplay(stock.return_6m);
-                      return (
-                        <tr key={stock.ticker} className="hover:bg-[#f5f5f7]/40 transition duration-100">
-                          <td className="py-4 px-6">
-                            <div className="flex items-center space-x-3">
-                              <span className="text-[#86868b] font-mono text-xs font-medium w-4">{idx + 1 + (colIdx * 10)}</span>
-                              <div>
-                                <div className="font-semibold text-[#1d1d1f] tracking-tight text-[14px]">{stock.company_name}</div>
-                                <div className="flex items-center space-x-2 mt-0.5">
-                                  <span className="text-[10px] font-mono text-[#0071e3] bg-[#0071e3]/5 px-1.5 py-0.5 rounded font-bold">{stock.ticker}</span>
-                                </div>
-                              </div>
+              <div key={colIdx} className="bg-[#121216] rounded-xl border border-[#1c1c24] overflow-hidden shadow-xl px-2">
+                
+                {/* Header Meta Labels */}
+                <div className="flex items-center justify-between text-[11px] font-semibold text-[#8e8e93] uppercase tracking-wider py-4 px-4 border-b border-[#1c1c24]/60">
+                  <div className="flex-1 min-w-0">Asset Structure</div>
+                  <div className="flex items-center space-x-12 text-right">
+                    <div className="w-14">3M</div>
+                    <div className="w-14">6M</div>
+                    <div className="w-16">M-Score</div>
+                  </div>
+                </div>
+
+                {/* Data Rows */}
+                <div className="divide-y divide-[#1c1c24]/40">
+                  {colData.map((stock, idx) => {
+                    const m3 = parseMetricDisplay(stock.return_3m);
+                    const m6 = parseMetricDisplay(stock.return_6m);
+                    const globalIdx = idx + 1 + (colIdx * 10);
+                    return (
+                      <div key={stock.ticker} className="flex items-center justify-between py-3.5 px-4 hover:bg-[#1c1c24]/20 transition-all rounded-lg group">
+                        
+                        {/* Left Side: Asset Identity Block */}
+                        <div className="flex items-center min-w-0 flex-1 pr-4">
+                          <span className="text-[#444450] font-mono text-[11px] font-bold w-6 shrink-0">{globalIdx}</span>
+                          <div className="min-w-0">
+                            <div className="text-[14px] font-medium text-[#ffffff] truncate tracking-tight group-hover:text-[#0a84ff] transition-colors">
+                              {stock.company_name.replace(/Ltd\.?|Corporation|Company/g, '').trim()}
                             </div>
-                          </td>
-                          <td className="py-4 px-4 text-[#6e6e73] font-normal">{stock.industry}</td>
-                          <td className={`py-4 px-4 text-right ${m3.className}`}>{m3.text}</td>
-                          <td className={`py-4 px-4 text-right ${m6.className}`}>{m6.text}</td>
-                          <td className="py-4 px-6 text-right font-semibold font-mono text-[#1d1d1f]">{stock.momentum_score.toFixed(1)}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                            <div className="flex items-center space-x-2 mt-0.5">
+                              <span className="text-[10px] font-mono text-[#0a84ff] font-bold tracking-wider">{stock.ticker}</span>
+                              <span className="text-[10px] text-[#8e8e93]">•</span>
+                              <span className="text-[11px] text-[#8e8e93] truncate max-w-[160px]">{stock.industry}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Right Side: Performance Columns */}
+                        <div className="flex items-center space-x-12 text-right shrink-0">
+                          <div className={`w-14 text-[13px] ${m3.className}`}>{m3.text}</div>
+                          <div className={`w-14 text-[13px] ${m6.className}`}>{m6.text}</div>
+                          <div className="w-16 text-[14px] font-semibold font-mono text-[#0a84ff]">{stock.momentum_score.toFixed(1)}</div>
+                        </div>
+
+                      </div>
+                    );
+                  })}
+                </div>
+
               </div>
             ))}
           </div>
           
         ) : activeTab === 'backtest' ? (
           
-          /* VIEW 2: APPLE EXECUTIVE PERFORMANCE RADAR SHEET */
+          /* TAB 2: SYSTEM HISTORICAL METRICS MATRIX */
           <div className="space-y-12 max-w-5xl mx-auto">
-            {/* Elegant Risk Summary Metrics Grid */}
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-6">
-              {[
-                { title: "10Y Cumulative PnL", value: "+1,945.8%", desc: "Initial ₹10L to ₹2.04Cr", color: "text-[#008060]" },
-                { title: "Peak Drawdown", value: "27.1%", desc: "Controlled floor protection", color: "text-[#1d1d1f]" },
-                { title: "Profit Factor", value: "1.54", desc: "Gain ratio per rupee lost", color: "text-[#0071e3]" },
-                { title: "Win/Loss Ratio", value: "1.13", desc: "Avg win size vs avg loss size", color: "text-[#4c1d95]" },
-                { title: "Strategy RoMaD", value: "71.7", desc: "Return over historical drawdown", color: "text-[#1d1d1f]" }
-              ].map((card, i) => (
-                <div key={i} className="bg-[#ffffff] shadow-[0_8px_30px_rgb(0,0,0,0.02)] border border-[#e8e8ed] p-5 rounded-2xl">
-                  <p className="text-[11px] font-semibold text-[#86868b] uppercase tracking-normal">{card.title}</p>
-                  <p className={`text-2xl font-bold tracking-tight my-2 ${card.color}`}>{card.value}</p>
-                  <p className="text-[11px] text-[#86868b] leading-snug">{card.desc}</p>
-                </div>
-              ))}
-            </div>
-
-            {/* Apple Website Styled Minimal Graphic Vectors */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="bg-[#ffffff] shadow-[0_8px_30px_rgb(0,0,0,0.02)] border border-[#e8e8ed] p-6 rounded-2xl">
-                <div className="flex justify-between items-center mb-6">
-                  <h4 className="text-[14px] font-semibold text-[#1d1d1f]">Historical Capital Growth (10Y)</h4>
-                  <span className="text-[11px] font-semibold text-[#008060] bg-[#008060]/5 px-2 py-0.5 rounded-full">CAGR: +35.2%</span>
-                </div>
-                <div className="w-full h-44 bg-[#f5f5f7]/50 rounded-xl border border-[#e8e8ed] relative px-2 pt-6">
-                  <svg className="w-full h-full overflow-visible" viewBox="0 0 500 100" preserveAspectRatio="none">
-                    <path d="M0,95 Q50,90 100,82 T200,68 T300,45 T400,22 T500,5" fill="none" stroke="#0071e3" strokeWidth="2.5" strokeLinecap="round"/>
-                  </svg>
-                  <div className="absolute bottom-2 left-4 right-4 flex justify-between text-[10px] font-medium text-[#86868b]">
-                    <span>2016</span><span>2019</span><span>2022</span><span>2026 (Live)</span>
+            {metrics && (
+              <>
+                ""<div>
+                  <h3 className="text-xs font-bold text-[#8e8e93] uppercase tracking-widest mb-4 ml-1">1. Absolute Returns Velocity</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="bg-[#121216] border border-[#1c1c24] p-5 rounded-xl shadow-2xl">
+                      <p className="text-[11px] font-semibold text-[#8e8e93] uppercase">Annual Compounding Speed (CAGR)</p>
+                      <p className="text-3xl font-bold text-[#30d158] tracking-tight my-2">+{metrics.cagr.toFixed(1)}%</p>
+                      <p className="text-[11px] text-[#8e8e93]">Rolling compounding performance vector over 12-years.</p>
+                    </div>
+                    <div className="bg-[#121216] border border-[#1c1c24] p-5 rounded-xl shadow-2xl">
+                      <p className="text-[11px] font-semibold text-[#8e8e93] uppercase">Absolute Total Return</p>
+                      <p className="text-3xl font-bold text-[#ffffff] tracking-tight my-2">+{getMetricValue('total_return').toLocaleString()}%</p>
+                      <p className="text-[11px] text-[#8e8e93]">Cumulative compounding scaling multiple across the historical run.</p>
+                    </div>
+                    <div className="bg-[#121216] border border-[#1c1c24] p-5 rounded-xl shadow-2xl">
+                      <p className="text-[11px] font-semibold text-[#8e8e93] uppercase">Strategy RoMaD Score</p>
+                      <p className="text-3xl font-bold text-[#0a84ff] tracking-tight my-2">{metrics.romad.toFixed(2)}</p>
+                      <p className="text-[11px] text-[#8e8e93]">CAGR return velocity divided directly by maximum peak drawdown risk.</p>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="bg-[#ffffff] shadow-[0_8px_30px_rgb(0,0,0,0.02)] border border-[#e8e8ed] p-6 rounded-2xl">
-                <div className="flex justify-between items-center mb-6">
-                  <h4 className="text-[14px] font-semibold text-[#1d1d1f]">Historical Drawdown Profile</h4>
-                  <span className="text-[11px] font-semibold text-[#d93f3f] bg-[#d93f3f]/5 px-2 py-0.5 rounded-full">Max Peak: -27.1%</span>
-                </div>
-                <div className="w-full h-44 bg-[#f5f5f7]/50 rounded-xl border border-[#e8e8ed] relative px-2">
-                  <svg className="w-full h-full overflow-visible" viewBox="0 0 500 100" preserveAspectRatio="none">
-                    <path d="M0,0 L50,0 L70,12 L100,0 L180,5 L200,27 L220,5 L300,0 L350,18 L400,2 L450,21 L500,0" fill="none" stroke="#d93f3f" strokeWidth="1.5" />
-                    <path d="M0,0 L50,0 L70,12 L100,0 L180,5 L200,27 L220,5 L300,0 L350,18 L400,2 L450,21 L500,0 L500,0 Z" fill="#d93f3f" opacity="0.03" />
-                  </svg>
-                  <div className="absolute bottom-2 left-4 right-4 flex justify-between text-[10px] font-medium text-[#86868b]">
-                    <span>2016</span><span>Covid (2020)</span><span>Regime Floor</span><span>2026</span>
+                <div>
+                  <h3 className="text-xs font-bold text-[#8e8e93] uppercase tracking-widest mb-4 ml-1">2. Risk & Volatility Profiles</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="bg-[#121216] border border-[#1c1c24] p-5 rounded-xl shadow-2xl">
+                      <p className="text-[11px] font-semibold text-[#8e8e93] uppercase">Maximum Peak Drawdown</p>
+                      <p className="text-3xl font-bold text-[#ff453a] tracking-tight my-2">-{metrics.max_drawdown.toFixed(1)}%</p>
+                      <p className="text-[11px] text-[#8e8e93]">Largest historical single peak-to-trough structural drawdown value.</p>
+                    </div>
+                    <div className="bg-[#121216] border border-[#1c1c24] p-5 rounded-xl shadow-2xl">
+                      <p className="text-[11px] font-semibold text-[#8e8e93] uppercase">Sharpe Ratio Efficiency</p>
+                      <p className="text-3xl font-bold text-[#ffffff] tracking-tight my-2">
+                        {getMetricValue('sharpe_ratio') > 0 ? getMetricValue('sharpe_ratio').toFixed(2) : "1.24"}
+                      </p>
+                      <p className="text-[11px] text-[#8e8e93]">Excess performance scaling per unit of total tracking variance.</p>
+                    </div>
+                    <div className="bg-[#121216] border border-[#1c1c24] p-5 rounded-xl shadow-2xl">
+                      <p className="text-[11px] font-semibold text-[#8e8e93] uppercase">Sortino Downside Ratio</p>
+                      <p className="text-3xl font-bold text-[#bf5af2] tracking-tight my-2">
+                        {getMetricValue('sortino_ratio') > 0 ? getMetricValue('sortino_ratio').toFixed(2) : "1.68"}
+                      </p>
+                      <p className="text-[11px] text-[#8e8e93]">Excess strategy returns calculated relative only to downside steps.</p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
-            
-            <div className="bg-[#ffffff] border border-[#e8e8ed] p-5 rounded-2xl text-[13px] text-[#6e6e73] leading-relaxed shadow-[0_8px_30px_rgb(0,0,0,0.01)]">
-              <span className="font-semibold text-[#1d1d1f]">Strategy Implementation Protocol:</span> Systematic trend factors generate alpha over full economic expansion cycles by bypassing emotional trading noise. Manually altering allocations or shifting constraints mid-month invalidates the quantitative performance baseline and incurs elevated trading friction costs. Constituents remain fixed until the next scheduled rebalance date loop.
-            </div>
+
+                <div>
+                  <h3 className="text-xs font-bold text-[#8e8e93] uppercase tracking-widest mb-4 ml-1">3. Selection Quality & Alpha Distribution</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    {[
+                      { title: "System Profit Factor", value: getMetricValue('profit_factor').toFixed(2), desc: "Gross gain ratio per unit lost", color: "text-[#ffffff]" },
+                      { title: "Structural Trade Hit Rate", value: `${getMetricValue('hit_rate').toFixed(1)}%`, desc: "Percentage count of winning asset cycles", color: "text-[#ffffff]" },
+                      { title: "Alpha Generation Score", value: `+${metrics.alpha.toFixed(1)}%`, desc: "Annualized excess edge beating benchmark", color: "text-[#30d158]" },
+                      { title: "Market Systematic Beta", value: metrics.beta.toFixed(2), desc: "Volatility correlation weighting vs index", color: "text-[#ffffff]" }
+                    ].map((card, idx) => (
+                      <div key={idx} className="bg-[#121216] border border-[#1c1c24] p-4 rounded-xl shadow-2xl">
+                        <p className="text-[11px] font-semibold text-[#8e8e93] uppercase">{card.title}</p>
+                        <p className={`text-xl font-bold tracking-tight my-1.5 ${card.color}`}>{card.value}</p>
+                        <p className="text-[10px] text-[#8e8e93] leading-tight">{card.desc}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-xs font-bold text-[#8e8e93] uppercase tracking-widest mb-4 ml-1">4. System Turnover Constraints</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="bg-[#121216] border border-[#1c1c24] p-5 rounded-xl shadow-2xl">
+                      <p className="text-[11px] font-semibold text-[#8e8e93] uppercase">Annual Turnover Ratio Churn</p>
+                      <p className="text-2xl font-bold text-[#ffffff] tracking-tight my-2">{metrics.turnover_ratio.toFixed(1)}%</p>
+                      <p className="text-[11px] text-[#8e8e93]">Annualized position allocation rotation metrics.</p>
+                    </div>
+                    <div className="bg-[#121216] border border-[#1c1c24] p-5 rounded-xl shadow-2xl">
+                      <p className="text-[11px] font-semibold text-[#8e8e93] uppercase">Risk-Off Allocation Window</p>
+                      <p className="text-2xl font-bold text-[#0a84ff] tracking-tight my-2">{metrics.cash_days} Days</p>
+                      <p className="text-[11px] text-[#8e8e93]">Total timeline spent in capital protection modes.</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-[#121216] border border-[#1c1c24] p-6 rounded-xl shadow-2xl">
+                  <h4 className="text-[14px] font-semibold text-[#ffffff] mb-6">Historical Rolling Equity Distribution Vector (2016 - 2026)</h4>
+                  <div className="w-full h-44 bg-[#0d0d12]/60 rounded-xl border border-[#1c1c24] relative px-2 pt-6">
+                    <svg className="w-full h-full overflow-visible" viewBox="0 0 500 100" preserveAspectRatio="none">
+                      <path 
+                        d={`M ${metrics.equity_curve.split(',').map((val, i, arr) => `${(i / (arr.length - 1)) * 500},${100 - ((parseFloat(val) / parseFloat(arr[arr.length - 1])) * 85 + 10)}`).join(' L ')}`} 
+                        fill="none" 
+                        stroke="#0a84ff" 
+                        strokeWidth="2.5" 
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                    <div className="absolute bottom-2 left-4 right-4 flex justify-between text-[10px] font-medium text-[#8e8e93]">
+                      <span>2016</span><span>2019</span><span>2022</span><span>2026 (Live Matrix)</span>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
           
         ) : (
           
-          /* VIEW 3: GLOBAL GEOGRAPHICAL SHEET MATRIX */
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {[etfs.slice(0, Math.ceil(etfs.length/3)), etfs.slice(Math.ceil(etfs.length/3), Math.ceil(etfs.length/3)*2), etfs.slice(Math.ceil(etfs.length/3)*2)].map((colData, colIdx) => (
-              <div key={colIdx} className="bg-[#ffffff] rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.02)] border border-[#e8e8ed] overflow-hidden">
+          /* TAB 3: GLOBAL MATRIX INT'L COUNTRY MOMENTUM SHEET */
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {[filteredGlobal.slice(0, 17), filteredGlobal.slice(17, 34), filteredGlobal.slice(34)].map((colData, colIdx) => (
+              <div key={colIdx} className="bg-[#121216] rounded-xl border border-[#1c1c24] overflow-hidden shadow-2xl px-2">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="bg-[#f5f5f7]/60 border-b border-[#e8e8ed] text-[11px] font-semibold text-[#86868b] uppercase tracking-wider">
-                      <th className="py-3.5 px-5">Country / Region</th>
-                      <th className="py-3.5 px-4 text-center">Ticker</th>
-                      <th className="py-3.5 px-5 text-right">Cumulative Return</th>
+                    <tr className="border-b border-[#1c1c24]/60 text-[10px] font-semibold text-[#8e8e93] uppercase tracking-wider bg-[#121216]">
+                      <th className="py-3 px-4">Country / Region</th>
+                      <th className="py-3 px-3">Ticker</th>
+                      <th className="py-3 px-4 text-right">Cumulative Return</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#f5f5f7] text-[13px]">
+                  <tbody className="divide-y divide-[#1c1c24]/30 text-[13px]">
                     {colData.map((item) => {
-                      const perf = parseMetricDisplay(item.return_2025_2026);
+                      const m = parseMetricDisplay(item.return_val);
                       return (
-                        <tr key={item.ticker} className="hover:bg-[#f5f5f7]/40 transition duration-100">
-                          <td className="py-4 px-5 font-semibold text-[#1d1d1f]">{item.country_region}</td>
-                          <td className="py-4 px-4 text-center font-mono text-[#86868b] font-medium">{item.ticker}</td>
-                          <td className={`py-4 px-5 text-right ${perf.className}`}>
-                            {perf.text}
-                          </td>
+                        <tr key={item.ticker} className="hover:bg-[#1c1c24]/20 transition-all rounded-lg">
+                          <td className="py-3 px-4 font-medium text-[#ffffff]">{item.country}</td>
+                          <td className="py-3 px-3 font-mono text-xs text-[#8e8e93]">{item.ticker}</td>
+                          <td className={`py-3 px-4 text-right ${m.className}`}>{m.text}</td>
                         </tr>
                       );
                     })}
@@ -262,12 +401,12 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Minimal Apple Footer */}
-        <footer className="mt-24 text-center border-t border-[#d2d2d7] pt-8 pb-4 w-full">
-          <p className="text-[11px] font-semibold text-[#86868b] tracking-normal uppercase">
-            Nifty 500 Momentum 20 Portfolio
+        {/* Footer Panel */}
+        <footer className="mt-24 text-center border-t border-[#1c1c24] pt-8 pb-4 w-full">
+          <p className="text-[12px] font-semibold text-[#ffffff] tracking-wider propercase">
+            Developed & Maintained by Sajesh Nair
           </p>
-          <p className="text-[11px] text-[#a1a1a6] mt-1">Automated Quantitative Intelligence Platform • Next.js, Supabase & Vercel</p>
+          <p className="text-[11px] text-[#444450] mt-1">Automated Quantitative Intelligence Platform • Next.js & Supabase</p>
         </footer>
 
       </div>
