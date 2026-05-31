@@ -6,6 +6,13 @@ import yfinance as yf
 import pandas as pd
 from supabase import create_client, Client
 
+# Smart fallback: Only load dotenv if it exists (for local VS Code development)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # On GitHub Actions, environment variables are handled natively
+
 # Map of Tickers to Country/Region names from your dashboard design
 ETF_MAP = {
     "EWY": "South Korea", "EPU": "Peru", "EWT": "Taiwan", "EPOL": "Poland", 
@@ -25,12 +32,16 @@ ETF_MAP = {
 }
 
 def calculate_and_sync():
+    print("=========================================================================")
+    print("       LAUNCHING LIVE GLOBAL MATRIX PERFORMANCE SYNC ENGINE             ")
+    print("=========================================================================")
+    
     # Initialize Supabase client using server environment variables
     supabase_url = os.environ.get("SUPABASE_URL")
     supabase_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") # Bypasses RLS for secure database writes
     
     if not supabase_url or not supabase_key:
-        print("Missing Supabase credentials.")
+        print("Critical Error: Supabase credentials missing in environment configuration.")
         return {"status": "error", "message": "Missing credentials"}
 
     supabase: Client = create_client(supabase_url, supabase_key)
@@ -78,9 +89,10 @@ def calculate_and_sync():
             print(f"Failed handling ticker {ticker}: {str(e)}")
             continue
             
+    print(f"🎉 Sync Complete! Successfully updated {len(results_logged)} global macro asset matrix positions.")
     return {"status": "success", "processed_tickers": results_logged}
 
-# Vercel Serverless Function handler contract
+# Vercel Serverless Function handler contract (remains active for Vercel Cron endpoints)
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         # Verify the security signature to prevent malicious execution overhead
@@ -101,3 +113,7 @@ class handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(json.dumps(sync_summary).encode())
         return
+
+# Critical Execution Hook: Allows GitHub Actions to execute this file directly via terminal command
+if __name__ == "__main__":
+    calculate_and_sync()

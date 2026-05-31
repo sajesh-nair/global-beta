@@ -4,22 +4,25 @@ import pandas as pd
 import yfinance as yf
 from sklearn.linear_model import LinearRegression
 from supabase import create_client
-from dotenv import load_dotenv
+
+# Smart fallback: Only load dotenv if it exists (for local VS Code development)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # On GitHub Actions, environment variables are handled natively
 
 def sync_live_momentum_portfolio():
     print("=========================================================================")
     print("     LAUNCHING LIVE RELATIVE MOMENTUM ENGINE (NIFTY 200 TOP 20)          ")
     print("=========================================================================")
     
-    load_dotenv() 
-    
     sb_url = os.environ.get("SUPABASE_URL")
-    # Switch the key variable here to your service role key to bypass Postgres RLS locks:
     sb_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") 
 
     if not sb_url or not sb_key:
-            print("Critical Error: Supabase master keys missing in environment configuration.")
-            return
+        print("Critical Error: Supabase master keys missing in environment configuration.")
+        return
     supabase = create_client(sb_url, sb_key)
 
     csv_filename = "nifty200.csv"
@@ -31,7 +34,6 @@ def sync_live_momentum_portfolio():
     tickers = [f"{str(sym).strip()}.NS" for sym in universe_df['Symbol']]
     
     print("Fetching live market price matrices from Yahoo Finance cloud...")
-    # Fetch 15 months of daily records to build steady lookback vectors
     master_data = yf.download(tickers, period="15mo", interval="1d", progress=False)['Close']
     stock_data = master_data.dropna(how='all')
     

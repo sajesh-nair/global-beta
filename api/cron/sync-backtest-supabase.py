@@ -4,17 +4,23 @@ import pandas as pd
 import yfinance as yf
 from sklearn.linear_model import LinearRegression
 from supabase import create_client
-from dotenv import load_dotenv
+
+# Smart fallback: Only load dotenv if it exists (for local VS Code development)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # On GitHub Actions or cloud environments, variables are handled natively
 
 def run_relative_momentum_backtest():
     print("=========================================================================")
     print("     LAUNCHING RELATIVE MOMENTUM BACKTEST ENGINE (NIFTY 200 TOP 20)      ")
     print("=========================================================================")
     
-    load_dotenv() 
-    
     sb_url = os.environ.get("SUPABASE_URL")
-    sb_key = os.environ.get("SUPABASE_KEY")
+    # UPDATED: Switched to service role key to cleanly bypass Postgres RLS locks during write operations
+    sb_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+    
     if not sb_url or not sb_key:
         print("Critical Error: Supabase environment variables are missing.")
         return
@@ -174,7 +180,7 @@ def run_relative_momentum_backtest():
     payload = {
         "romad": round(romad, 2),
         "turnover_ratio": round(estimated_annual_turnover, 1),
-        "cash_days": 0,  # Pure unconstrained equity allocation
+        "cash_days": 0,  
         "equity_curve": eq_str,
         "alpha": round(alpha, 1),
         "beta": round(beta, 2),
