@@ -52,8 +52,10 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 const IS_FREE_GLOBAL_ONLY = process.env.NEXT_PUBLIC_APP_MODE === "FREE_GLOBAL_ONLY";
 
 export default function Dashboard() {
-  // Free app forces the 'global' view natively. Paid app/local server opens up to the 'portfolio' core tab.
-  const [activeTab, setActiveTab] = useState<'portfolio' | 'backtest' | 'global'>(IS_FREE_GLOBAL_ONLY ? 'global' : 'portfolio');
+  // 🟢 FIXED: Type cast ternary string evaluation strictly into the explicit state union type constraints
+  const [activeTab, setActiveTab] = useState<'portfolio' | 'backtest' | 'global'>(
+    (IS_FREE_GLOBAL_ONLY ? 'global' : 'portfolio') as 'portfolio' | 'backtest' | 'global'
+  );
   const [stocks, setStocks] = useState<NiftyStockData[]>([]);
   const [metrics, setMetrics] = useState<AnalyticsMetrics | null>(null);
   const [globalMatrix, setGlobalMatrix] = useState<GlobalCountryAllocation[]>([]);
