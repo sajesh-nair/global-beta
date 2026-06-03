@@ -48,8 +48,12 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+// 🛡️ Safe Feature Gate: True ONLY on the Free App Vercel environment
+const IS_FREE_GLOBAL_ONLY = process.env.NEXT_PUBLIC_APP_MODE === "FREE_GLOBAL_ONLY";
+
 export default function Dashboard() {
-  const [activeTab, setActiveTab] = useState<'portfolio' | 'backtest' | 'global'>('portfolio');
+  // Free app forces the 'global' view natively. Paid app/local server opens up to the 'portfolio' core tab.
+  const [activeTab, setActiveTab] = useState<'portfolio' | 'backtest' | 'global'>(IS_FREE_GLOBAL_ONLY ? 'global' : 'portfolio');
   const [stocks, setStocks] = useState<NiftyStockData[]>([]);
   const [metrics, setMetrics] = useState<AnalyticsMetrics | null>(null);
   const [globalMatrix, setGlobalMatrix] = useState<GlobalCountryAllocation[]>([]);
@@ -60,17 +64,27 @@ export default function Dashboard() {
     async function fetchDatabaseData() {
       try {
         setLoading(true);
-        const [niftyRes, metricsRes, globalRes] = await Promise.all([
-          supabase.from('nifty_momentum_20').select('*').order('momentum_score', { ascending: false }),
-          supabase.from('backtest_analytics').select('*').single(),
-          supabase.from('etf_performance').select('ticker, country_region, return_2025_till_date, return_ytd').order('return_2025_till_date', { ascending: false })
-        ]);
-
-        if (niftyRes.data) setStocks(niftyRes.data);
-        if (metricsRes.data) setMetrics(metricsRes.data);
-        if (globalRes.data) setGlobalMatrix(globalRes.data);
+        
+        if (IS_FREE_GLOBAL_ONLY) {
+          // ⚡ FREE SITE FLOW: Only pull the Global matrix values. Zero tracking overhead for Nifty/Backtest.
+          const { data } = await supabase
+            .from('etf_performance')
+            .select('ticker, country_region, return_2025_till_date, return_ytd')
+            .order('return_2025_till_date', { ascending: false });
+          if (data) setGlobalMatrix(data);
+        } else {
+          // 🏆 PREMIUM PLATFORM / LOCALHOST FLOW: Pull all three database engines natively
+          const [niftyRes, metricsRes, globalRes] = await Promise.all([
+            supabase.from('nifty_momentum_20').select('*').order('momentum_score', { ascending: false }),
+            supabase.from('backtest_analytics').select('*').single(),
+            supabase.from('etf_performance').select('ticker, country_region, return_2025_till_date, return_ytd').order('return_2025_till_date', { ascending: false })
+          ]);
+          if (niftyRes.data) setStocks(niftyRes.data);
+          if (metricsRes.data) setMetrics(metricsRes.data);
+          if (globalRes.data) setGlobalMatrix(globalRes.data);
+        }
       } catch (err) {
-        console.error("Database connection error: ", err);
+        console.error("Database alignment link warning: ", err);
       } finally {
         setLoading(false);
       }
@@ -106,7 +120,7 @@ export default function Dashboard() {
     <div className="min-h-screen bg-[#070709] text-[#ffffff] antialiased font-sans selection:bg-[#0a84ff]/20">
       
       <div className="bg-[#121216] text-[#8e8e93] text-[11px] py-2.5 text-center tracking-wider font-medium border-b border-[#1c1c24] uppercase">
-        System Status: Running Pure Relative Momentum Weights • Nifty 200 Universe Active
+        System Status: Operational • {IS_FREE_GLOBAL_ONLY ? "Public Global Matrix Mode" : "Premium Institutional Stack Engaged"}
       </div>
 
       <div className="max-w-[1400px] mx-auto px-8 py-12">
@@ -127,7 +141,7 @@ export default function Dashboard() {
           <div className="w-full md:w-80">
             <input 
               type="text"
-              placeholder="Search assets..."
+              placeholder={activeTab === 'global' ? "Search global assets..." : "Search assets..."}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full bg-[#121216] text-[#ffffff] placeholder-[#444450] text-[13px] px-5 py-2.5 rounded-full border border-[#1c1c24] focus:outline-none focus:border-[#0a84ff] transition-all font-medium"
@@ -135,20 +149,22 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Tab Selection Row */}
-        <div className="flex bg-[#121216] p-1 rounded-full max-w-sm mb-10 border border-[#1c1c24]">
-          {(['portfolio', 'backtest', 'global'] as const).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`flex-1 text-center py-2 text-[13px] font-medium rounded-full transition-all uppercase tracking-wider ${
-                activeTab === tab ? 'bg-[#1c1c24] text-[#0a84ff] font-semibold' : 'text-[#8e8e93] hover:text-[#ffffff]'
-              }`}
-            >
-              {tab === 'portfolio' ? 'Portfolio' : tab === 'backtest' ? 'Backtest' : 'Global Matrix'}
-            </button>
-          ))}
-        </div>
+        {/* Tab Selection Row - SAFELY CUT completely out of the Free Showcase view */}
+        {!IS_FREE_GLOBAL_ONLY && (
+          <div className="flex bg-[#121216] p-1 rounded-full max-w-sm mb-10 border border-[#1c1c24]">
+            {(['portfolio', 'backtest', 'global'] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`flex-1 text-center py-2 text-[13px] font-medium rounded-full transition-all uppercase tracking-wider ${
+                  activeTab === tab ? 'bg-[#1c1c24] text-[#0a84ff] font-semibold' : 'text-[#8e8e93] hover:text-[#ffffff]'
+                }`}
+              >
+                {tab === 'portfolio' ? 'Portfolio' : tab === 'backtest' ? 'Backtest' : 'Global Matrix'}
+              </button>
+            ))}
+          </div>
+        )}
 
         {loading ? (
           <div className="flex flex-col items-center justify-center py-32 space-y-3">
@@ -157,12 +173,10 @@ export default function Dashboard() {
           </div>
         ) : activeTab === 'portfolio' ? (
           
-          /* TAB 1: PREMIUM COMPACT ASSET LIST GRID */
+          /* VIEW 1: PREMIUM NIFTY MATRIX */
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
             {[filteredNifty.slice(0, 10), filteredNifty.slice(10, 20)].map((colData, colIdx) => (
               <div key={colIdx} className="bg-[#121216] rounded-xl border border-[#1c1c24] overflow-hidden shadow-xl px-2">
-                
-                {/* Header Meta Labels */}
                 <div className="flex items-center justify-between text-[11px] font-semibold text-[#8e8e93] uppercase tracking-wider py-4 px-4 border-b border-[#1c1c24]/60">
                   <div className="flex-1 min-w-0">Asset Structure</div>
                   <div className="flex items-center space-x-12 text-right">
@@ -171,8 +185,6 @@ export default function Dashboard() {
                     <div className="w-16">M-Score</div>
                   </div>
                 </div>
-
-                {/* Data Rows */}
                 <div className="divide-y divide-[#1c1c24]/40">
                   {colData.map((stock, idx) => {
                     const m3 = parseMetricDisplay(stock.return_3m);
@@ -180,8 +192,6 @@ export default function Dashboard() {
                     const globalIdx = idx + 1 + (colIdx * 10);
                     return (
                       <div key={stock.ticker} className="flex items-center justify-between py-3.5 px-4 hover:bg-[#1c1c24]/20 transition-all rounded-lg group">
-                        
-                        {/* Left Side: Asset Identity Block */}
                         <div className="flex items-center min-w-0 flex-1 pr-4">
                           <span className="text-[#444450] font-mono text-[11px] font-bold w-6 shrink-0">{globalIdx}</span>
                           <div className="min-w-0">
@@ -195,26 +205,22 @@ export default function Dashboard() {
                             </div>
                           </div>
                         </div>
-
-                        {/* Right Side: Performance Columns */}
                         <div className="flex items-center space-x-12 text-right shrink-0">
                           <div className={`w-14 text-[13px] ${m3.className}`}>{m3.text}</div>
                           <div className={`w-14 text-[13px] ${m6.className}`}>{m6.text}</div>
                           <div className="w-16 text-[14px] font-semibold font-mono text-[#0a84ff]">{stock.momentum_score.toFixed(1)}</div>
                         </div>
-
                       </div>
                     );
                   })}
                 </div>
-
               </div>
             ))}
           </div>
           
         ) : activeTab === 'backtest' ? (
           
-          /* TAB 2: SYSTEM HISTORICAL METRICS MATRIX */
+          /* VIEW 2: PREMIUM SIMULATION BENCHMARKS */
           <div className="space-y-12 max-w-5xl mx-auto">
             {metrics && (
               <>
@@ -224,17 +230,14 @@ export default function Dashboard() {
                     <div className="bg-[#121216] border border-[#1c1c24] p-5 rounded-xl shadow-2xl">
                       <p className="text-[11px] font-semibold text-[#8e8e93] uppercase">Annual Compounding Speed (CAGR)</p>
                       <p className="text-3xl font-bold text-[#30d158] tracking-tight my-2">+{metrics.cagr.toFixed(1)}%</p>
-                      <p className="text-[11px] text-[#8e8e93]">Rolling compounding performance vector over 12-years.</p>
                     </div>
                     <div className="bg-[#121216] border border-[#1c1c24] p-5 rounded-xl shadow-2xl">
                       <p className="text-[11px] font-semibold text-[#8e8e93] uppercase">Absolute Total Return</p>
                       <p className="text-3xl font-bold text-[#ffffff] tracking-tight my-2">+{getMetricValue('total_return').toLocaleString()}%</p>
-                      <p className="text-[11px] text-[#8e8e93]">Cumulative compounding scaling multiple across the historical run.</p>
                     </div>
                     <div className="bg-[#121216] border border-[#1c1c24] p-5 rounded-xl shadow-2xl">
                       <p className="text-[11px] font-semibold text-[#8e8e93] uppercase">Strategy RoMaD Score</p>
                       <p className="text-3xl font-bold text-[#0a84ff] tracking-tight my-2">{metrics.romad.toFixed(2)}</p>
-                      <p className="text-[11px] text-[#8e8e93]">CAGR return velocity divided directly by maximum peak drawdown risk.</p>
                     </div>
                   </div>
                 </div>
@@ -245,55 +248,18 @@ export default function Dashboard() {
                     <div className="bg-[#121216] border border-[#1c1c24] p-5 rounded-xl shadow-2xl">
                       <p className="text-[11px] font-semibold text-[#8e8e93] uppercase">Maximum Peak Drawdown</p>
                       <p className="text-3xl font-bold text-[#ff453a] tracking-tight my-2">-{metrics.max_drawdown.toFixed(1)}%</p>
-                      <p className="text-[11px] text-[#8e8e93]">Largest historical single peak-to-trough structural drawdown value.</p>
                     </div>
                     <div className="bg-[#121216] border border-[#1c1c24] p-5 rounded-xl shadow-2xl">
                       <p className="text-[11px] font-semibold text-[#8e8e93] uppercase">Sharpe Ratio Efficiency</p>
                       <p className="text-3xl font-bold text-[#ffffff] tracking-tight my-2">
                         {getMetricValue('sharpe_ratio') > 0 ? getMetricValue('sharpe_ratio').toFixed(2) : "1.24"}
                       </p>
-                      <p className="text-[11px] text-[#8e8e93]">Excess performance scaling per unit of total tracking variance.</p>
                     </div>
                     <div className="bg-[#121216] border border-[#1c1c24] p-5 rounded-xl shadow-2xl">
                       <p className="text-[11px] font-semibold text-[#8e8e93] uppercase">Sortino Downside Ratio</p>
                       <p className="text-3xl font-bold text-[#bf5af2] tracking-tight my-2">
                         {getMetricValue('sortino_ratio') > 0 ? getMetricValue('sortino_ratio').toFixed(2) : "1.68"}
                       </p>
-                      <p className="text-[11px] text-[#8e8e93]">Excess strategy returns calculated relative only to downside steps.</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className="text-xs font-bold text-[#8e8e93] uppercase tracking-widest mb-4 ml-1">3. Selection Quality & Alpha Distribution</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                    {[
-                      { title: "System Profit Factor", value: getMetricValue('profit_factor').toFixed(2), desc: "Gross gain ratio per unit lost", color: "text-[#ffffff]" },
-                      { title: "Structural Trade Hit Rate", value: `${getMetricValue('hit_rate').toFixed(1)}%`, desc: "Percentage count of winning asset cycles", color: "text-[#ffffff]" },
-                      { title: "Alpha Generation Score", value: `+${metrics.alpha.toFixed(1)}%`, desc: "Annualized excess edge beating benchmark", color: "text-[#30d158]" },
-                      { title: "Market Systematic Beta", value: metrics.beta.toFixed(2), desc: "Volatility correlation weighting vs index", color: "text-[#ffffff]" }
-                    ].map((card, idx) => (
-                      <div key={idx} className="bg-[#121216] border border-[#1c1c24] p-4 rounded-xl shadow-2xl">
-                        <p className="text-[11px] font-semibold text-[#8e8e93] uppercase">{card.title}</p>
-                        <p className={`text-xl font-bold tracking-tight my-1.5 ${card.color}`}>{card.value}</p>
-                        <p className="text-[10px] text-[#8e8e93] leading-tight">{card.desc}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className="text-xs font-bold text-[#8e8e93] uppercase tracking-widest mb-4 ml-1">4. System Turnover Constraints</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="bg-[#121216] border border-[#1c1c24] p-5 rounded-xl shadow-2xl">
-                      <p className="text-[11px] font-semibold text-[#8e8e93] uppercase">Annual Turnover Ratio Churn</p>
-                      <p className="text-2xl font-bold text-[#ffffff] tracking-tight my-2">{metrics.turnover_ratio.toFixed(1)}%</p>
-                      <p className="text-[11px] text-[#8e8e93]">Annualized position allocation rotation metrics.</p>
-                    </div>
-                    <div className="bg-[#121216] border border-[#1c1c24] p-5 rounded-xl shadow-2xl">
-                      <p className="text-[11px] font-semibold text-[#8e8e93] uppercase">Risk-Off Allocation Window</p>
-                      <p className="text-2xl font-bold text-[#0a84ff] tracking-tight my-2">{metrics.cash_days} Days</p>
-                      <p className="text-[11px] text-[#8e8e93]">Total timeline spent in capital protection modes.</p>
                     </div>
                   </div>
                 </div>
@@ -310,9 +276,6 @@ export default function Dashboard() {
                         strokeLinecap="round"
                       />
                     </svg>
-                    <div className="absolute bottom-2 left-4 right-4 flex justify-between text-[10px] font-medium text-[#8e8e93]">
-                      <span>2016</span><span>2019</span><span>2022</span><span>2026 (Live Matrix)</span>
-                    </div>
                   </div>
                 </div>
               </>
@@ -320,8 +283,7 @@ export default function Dashboard() {
           </div>
           
         ) : (
-          
-          /* TAB 3: GLOBAL MATRIX INT'L COUNTRY MOMENTUM SHEET */
+          /* VIEW 3: GLOBAL MATRIX INT'L COUNTRY MOMENTUM SHEET (Universal Fallback View) */
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {[filteredGlobal.slice(0, 17), filteredGlobal.slice(17, 34), filteredGlobal.slice(34)].map((colData, colIdx) => (
               <div key={colIdx} className="bg-[#121216] rounded-xl border border-[#1c1c24] overflow-hidden shadow-2xl px-2">
