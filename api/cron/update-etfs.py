@@ -2,6 +2,7 @@ import os
 import time
 from http.server import BaseHTTPRequestHandler
 import json
+from datetime import datetime
 import yfinance as yf
 import pandas as pd
 from supabase import create_client, Client
@@ -33,7 +34,7 @@ ETF_MAP = {
 
 def calculate_and_sync():
     print("=========================================================================")
-    print("       LAUNCHING LIVE GLOBAL MATRIX PERFORMANCE SYNC ENGINE             ")
+    print("      LAUNCHING LIVE GLOBAL MATRIX PERFORMANCE SYNC ENGINE             ")
     print("=========================================================================")
     
     # Initialize Supabase client using server environment variables
@@ -47,40 +48,74 @@ def calculate_and_sync():
     supabase: Client = create_client(supabase_url, supabase_key)
     results_logged = []
 
+    # Dynamically determine tracking dates based on current system time
+    today_str = datetime.today().strftime('%Y-%m-%d')
+    current_year = datetime.today().year
+    current_ytd_start = f"{current_year}-01-01"
+    
+    print(f"Targeting Sync Profiles -> 2025 Start: 2025-01-01 | YTD Start: {current_ytd_start} | End Target: {today_str}")
+    print("-------------------------------------------------------------------------")
+
     # Process ETFs in small sequential batches to avoid rate limits
     for ticker, region in ETF_MAP.items():
         try:
-            print(f"Fetching data for {ticker} ({region})...")
-            # Fetch relevant history spanning 2025 up through 2026
-            df = yf.download(ticker, start="2025-01-01", end="2026-12-31", progress=False)
+            print(f"Processing data for {ticker} ({region})...")
             
-            if len(df) >= 2:
-                # Safely isolate the Close data and completely flatten any multi-index structures
-                if 'Close' in df.columns:
-                    close_data = df['Close'].values.flatten()
-                else:
-                    close_data = df.iloc[:, 0].values.flatten()
+            # Fetch full history from 2025 up through today dynamically
+            df = yf.download(ticker, start="2025-01-01", end=today_str, progress=False)
+            
+            if len(df) < 2:
+                print(f"Skipping {ticker}: Insufficient historic array lengths.")
+                continue
+
+            # Safely flatten multi-index structures from yfinance
+            if 'Close' in df.columns:
+                close_series = df['Close']
+            else:
+                close_series = df.iloc[:, 0]
                 
-                # Drop any NaN missing values that might sneak onto the edges
-                close_data = close_data[~pd.isna(close_data)]
-                
-                if len(close_data) >= 2:
-                    start_price = float(close_data[0])
-                    end_price = float(close_data[-1])
-                    
-                    # Formula: Total Return % = ((End - Start) / Start) * 100
-                    total_return = ((end_price - start_price) / start_price) * 100
-                    
-                    # Map payload to the Supabase SQL schema fields
-                    data_payload = {
-                        "ticker": ticker,
-                        "country_region": region,
-                        "return_2025_2026": round(total_return, 2)
-                    }
-                    
-                    # Overwrite on match or insert if new
-                    supabase.table("etf_performance").upsert(data_payload).execute()
-                    results_logged.append(ticker)
+            # Drop any NaN fields trailing on trading holiday boundaries
+            close_series = close_series.dropna()
+
+            if len(close_series) < 2:
+                continue
+
+            # Convert the series explicitly into a flat NumPy array to eliminate Series wrappers
+            close_prices = close_series.to_numpy().flatten()
+
+            # -------------------------------------------------------------
+            # METRIC 1: 2025 Till Date Cumulative Return
+            # -------------------------------------------------------------
+            price_2025_start = float(close_prices[0].item())
+            price_latest = float(close_prices[-1].item())
+            return_2025_cumulative = ((price_latest - price_2025_start) / price_2025_start) * 100
+
+            # -------------------------------------------------------------
+            # METRIC 2: Current Year Till Date (YTD) Return
+            # -------------------------------------------------------------
+            # Filter the series to grab only data inside the current calendar year
+            ytd_filtered = close_series[close_series.index >= current_ytd_start]
+            
+            if len(ytd_filtered) >= 2:
+                ytd_prices = ytd_filtered.to_numpy().flatten()
+                price_ytd_start = float(ytd_prices[0].item())
+                return_ytd = ((price_latest - price_ytd_start) / price_ytd_start) * 100
+            else:
+                return_ytd = 0.0
+
+            # -------------------------------------------------------------
+            # DATABASE SYNCHRONIZATION VIA STRICT OVERWRITE RULES
+            # -------------------------------------------------------------
+            data_payload = {
+                "ticker": ticker,
+                "country_region": region,
+                "return_2025_till_date": round(return_2025_cumulative, 2),
+                "return_ytd": round(return_ytd, 2)
+            }
+            
+            # Use on_conflict="ticker" to cleanly overwrite the 51 fixed matrix positions
+            supabase.table("etf_performance").upsert(data_payload, on_conflict="ticker").execute()
+            results_logged.append(ticker)
                 
             # Keep network requests separated by 250ms
             time.sleep(0.25)
@@ -92,10 +127,9 @@ def calculate_and_sync():
     print(f"🎉 Sync Complete! Successfully updated {len(results_logged)} global macro asset matrix positions.")
     return {"status": "success", "processed_tickers": results_logged}
 
-# Vercel Serverless Function handler contract (remains active for Vercel Cron endpoints)
+# Vercel Serverless Function handler contract
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        # Verify the security signature to prevent malicious execution overhead
         auth_header = self.headers.get('Authorization')
         cron_secret = os.environ.get("CRON_SECRET")
         
@@ -114,6 +148,6 @@ class handler(BaseHTTPRequestHandler):
         self.wfile.write(json.dumps(sync_summary).encode())
         return
 
-# Critical Execution Hook: Allows GitHub Actions to execute this file directly via terminal command
+# Critical Execution Hook for GitHub Actions terminal environments
 if __name__ == "__main__":
     calculate_and_sync()

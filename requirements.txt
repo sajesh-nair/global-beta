@@ -5,4 +5,4 @@ yfinance
 requests
 supabase
 python-dotenv
-dotenv
+pytz

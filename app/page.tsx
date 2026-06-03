@@ -38,9 +38,10 @@ interface AnalyticsMetrics {
 }
 
 interface GlobalCountryAllocation {
-  country: string;
+  country_region: string;
   ticker: string;
-  return_val: number;
+  return_2025_till_date: number;
+  return_ytd: number;
 }
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -51,74 +52,23 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<'portfolio' | 'backtest' | 'global'>('portfolio');
   const [stocks, setStocks] = useState<NiftyStockData[]>([]);
   const [metrics, setMetrics] = useState<AnalyticsMetrics | null>(null);
+  const [globalMatrix, setGlobalMatrix] = useState<GlobalCountryAllocation[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-
-  const globalMatrixData: GlobalCountryAllocation[] = [
-    { country: "South Korea", ticker: "EWY", return_val: 311.7 },
-    { country: "Peru", ticker: "EPU", return_val: 119.6 },
-    { country: "Taiwan", ticker: "EWT", return_val: 109.4 },
-    { country: "Austria", ticker: "EWO", return_val: 105.2 },
-    { country: "Poland", ticker: "EPOL", return_val: 103.8 },
-    { country: "Greece", ticker: "GREK", return_val: 98.2 },
-    { country: "Spain", ticker: "EWP", return_val: 91.8 },
-    { country: "Israel", ticker: "EIS", return_val: 82.6 },
-    { country: "Finland", ticker: "EFNL", return_val: 81.7 },
-    { country: "Colombia", ticker: "COLO", return_val: 81.7 },
-    { country: "South Africa", ticker: "EZA", return_val: 75.0 },
-    { country: "Chile", ticker: "ECH", return_val: 73.8 },
-    { country: "Italy", ticker: "EWI", return_val: 72.2 },
-    { country: "Mexico", ticker: "EWW", return_val: 70.5 },
-    { country: "Brazil", ticker: "EWZ", return_val: 66.7 },
-    { country: "Norway", ticker: "NORW", return_val: 65.8 },
-    { country: "Emerging Markets", ticker: "IEMG", return_val: 64.9 },
-    { country: "Vietnam", ticker: "VNM", return_val: 62.1 },
-    { country: "Netherlands", ticker: "EWN", return_val: 58.9 },
-    { country: "Eurozone", ticker: "EZU", return_val: 51.4 },
-    { country: "Total International", ticker: "VXUS", return_val: 51.4 },
-    { country: "Belgium", ticker: "EWK", return_val: 50.7 },
-    { country: "Hong Kong", ticker: "EWH", return_val: 48.6 },
-    { country: "Canada", ticker: "EWC", return_val: 48.0 },
-    { country: "Europe", ticker: "VGK", return_val: 45.9 },
-    { country: "Sweden", ticker: "EWD", return_val: 45.9 },
-    { country: "Japan", ticker: "EWJ", return_val: 45.1 },
-    { country: "EAFE", ticker: "IEFA", return_val: 45.0 },
-    { country: "United Kingdom", ticker: "EWU", return_val: 44.3 },
-    { country: "Singapore", ticker: "EWS", return_val: 41.5 },
-    { country: "Switzerland", ticker: "EWL", return_val: 40.3 },
-    { country: "Germany", ticker: "EWG", return_val: 39.8 },
-    { country: "Total World", ticker: "VT", return_val: 37.9 },
-    { country: "Ireland", ticker: "EIRL", return_val: 34.5 },
-    { country: "France", ticker: "EWQ", return_val: 33.0 },
-    { country: "US", ticker: "SPY", return_val: 31.3 },
-    { country: "Thailand", ticker: "THD", return_val: 28.1 },
-    { country: "Australia", ticker: "EWA", return_val: 26.3 },
-    { country: "Kuwait", ticker: "KWT", return_val: 25.8 },
-    { country: "UAE", ticker: "UAE", return_val: 24.9 },
-    { country: "China", ticker: "MCHI", return_val: 22.4 },
-    { country: "Malaysia", ticker: "EWM", return_val: 21.9 },
-    { country: "Argentina", ticker: "ARGT", return_val: 12.6 },
-    { country: "Qatar", ticker: "QAT", return_val: 11.4 },
-    { country: "Turkey", ticker: "TUR", return_val: 7.5 },
-    { country: "Denmark", ticker: "EDEN", return_val: 7.5 },
-    { country: "New Zealand", ticker: "ENZL", return_val: 5.3 },
-    { country: "Saudi Arabia", ticker: "KSA", return_val: -2.6 },
-    { country: "Philippines", ticker: "EPHE", return_val: -3.8 },
-    { country: "India", ticker: "INDA", return_val: -9.1 },
-    { country: "Indonesia", ticker: "EIDO", return_val: -29.8 }
-  ];
 
   useEffect(() => {
     async function fetchDatabaseData() {
       try {
         setLoading(true);
-        const [niftyRes, metricsRes] = await Promise.all([
+        const [niftyRes, metricsRes, globalRes] = await Promise.all([
           supabase.from('nifty_momentum_20').select('*').order('momentum_score', { ascending: false }),
-          supabase.from('backtest_analytics').select('*').single()
+          supabase.from('backtest_analytics').select('*').single(),
+          supabase.from('etf_performance').select('ticker, country_region, return_2025_till_date, return_ytd').order('return_2025_till_date', { ascending: false })
         ]);
 
         if (niftyRes.data) setStocks(niftyRes.data);
         if (metricsRes.data) setMetrics(metricsRes.data);
+        if (globalRes.data) setGlobalMatrix(globalRes.data);
       } catch (err) {
         console.error("Database connection error: ", err);
       } finally {
@@ -133,8 +83,8 @@ export default function Dashboard() {
     stock.ticker.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const filteredGlobal = globalMatrixData.filter(item => 
-    item.country.toLowerCase().includes(searchTerm.toLowerCase()) ||
+  const filteredGlobal = globalMatrix.filter(item => 
+    item.country_region.toLowerCase().includes(searchTerm.toLowerCase()) ||
     item.ticker.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -169,7 +119,7 @@ export default function Dashboard() {
             </h1>
             <p className="text-[13px] text-[#8e8e93] mt-1 font-normal tracking-wide">
               {activeTab === 'global' 
-                ? "Geographical macro-cycle capital distribution models tracking international assets." 
+                ? "Geographical macro-cycle capital distribution models tracking USD-denominated international assets." 
                 : "High-conviction cross-sectional relative trend indices tracking liquid large and mid-caps."}
             </p>
           </div>
@@ -268,7 +218,7 @@ export default function Dashboard() {
           <div className="space-y-12 max-w-5xl mx-auto">
             {metrics && (
               <>
-                ""<div>
+                <div>
                   <h3 className="text-xs font-bold text-[#8e8e93] uppercase tracking-widest mb-4 ml-1">1. Absolute Returns Velocity</h3>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="bg-[#121216] border border-[#1c1c24] p-5 rounded-xl shadow-2xl">
@@ -378,19 +328,22 @@ export default function Dashboard() {
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="border-b border-[#1c1c24]/60 text-[10px] font-semibold text-[#8e8e93] uppercase tracking-wider bg-[#121216]">
-                      <th className="py-3 px-4">Country / Region</th>
-                      <th className="py-3 px-3">Ticker</th>
-                      <th className="py-3 px-4 text-right">Cumulative Return</th>
+                      <th className="py-3 px-3">Country / Region</th>
+                      <th className="py-3 px-2">Ticker</th>
+                      <th className="py-3 px-2 text-right">Since 2025</th>
+                      <th className="py-3 px-3 text-right">YTD</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#1c1c24]/30 text-[13px]">
                     {colData.map((item) => {
-                      const m = parseMetricDisplay(item.return_val);
+                      const m2025 = parseMetricDisplay(item.return_2025_till_date);
+                      const mYtd = parseMetricDisplay(item.return_ytd);
                       return (
                         <tr key={item.ticker} className="hover:bg-[#1c1c24]/20 transition-all rounded-lg">
-                          <td className="py-3 px-4 font-medium text-[#ffffff]">{item.country}</td>
-                          <td className="py-3 px-3 font-mono text-xs text-[#8e8e93]">{item.ticker}</td>
-                          <td className={`py-3 px-4 text-right ${m.className}`}>{m.text}</td>
+                          <td className="py-3 px-3 font-medium text-[#ffffff] truncate max-w-[120px]">{item.country_region}</td>
+                          <td className="py-3 px-2 font-mono text-xs text-[#8e8e93]">{item.ticker}</td>
+                          <td className={`py-3 px-2 text-right ${m2025.className}`}>{m2025.text}</td>
+                          <td className={`py-3 px-3 text-right ${mYtd.className}`}>{mYtd.text}</td>
                         </tr>
                       );
                     })}
